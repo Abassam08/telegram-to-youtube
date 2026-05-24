@@ -49,5 +49,5 @@ YOUTUBE_FIXED_TAGS: list[str] = [
 ]
 
 # ── Scheduler (24-hour format) ────────────────────────────────────────────────
-DOWNLOAD_HOUR = 6                        # download job fires at 06:00 daily
-UPLOAD_HOURS  = [8, 11, 14, 17, 20]     # one upload per entry, spread across the day
+DOWNLOAD_HOUR = 3                        # download job fires at 03:00 daily
+UPLOAD_HOURS  = [4, 7, 13, 17, 20]     # one upload per entry, spread across the day
