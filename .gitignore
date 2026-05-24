@@ -1,0 +1,25 @@
+.env
+
+# runtime data
+data/
+
+# OAuth tokens and secrets (never commit these)
+credentials/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Telegram session
+data/telegram_session.session
+*.session
+
+# Logs
+*.log
+logs/
