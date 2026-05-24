@@ -29,6 +29,7 @@ def init_db() -> None:
                 drive_account       TEXT,
                 youtube_video_id    TEXT,
                 youtube_title       TEXT,
+                youtube_description TEXT,
                 youtube_tags        TEXT,       -- JSON array
                 status              TEXT    NOT NULL DEFAULT 'pending',
                 -- pending | downloading | downloaded | on_drive | uploading | uploaded | failed
@@ -46,6 +47,12 @@ def init_db() -> None:
                 UPDATE videos SET updated_at = datetime('now') WHERE id = NEW.id;
             END
         """)
+        # migrate existing databases that predate this column
+        try:
+            conn.execute("ALTER TABLE videos ADD COLUMN youtube_description TEXT")
+            log.info("Migrated DB: added youtube_description column")
+        except Exception:
+            pass  # column already exists
     log.info("Database initialised at %s", config.DB_PATH)
 
 

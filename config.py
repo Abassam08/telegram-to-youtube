@@ -24,12 +24,12 @@ DRIVE_CLIENT_SECRETS = "credentials/drive_client_secrets.json"
 DRIVE_FOLDER_NAME    = "telegram-videos"
 DRIVE_ACCOUNTS = [
     {
-        "name":        "account1",
+        "name":        "account1",          # abassam912@gmail.com — primary
         "token_file":  "credentials/drive_token1.json",
-        "capacity_gb": 100,
+        "capacity_gb": 122,
     },
     {
-        "name":        "account2",
+        "name":        "account2",          # ahmedindiaytube2025@gmail.com — secondary
         "token_file":  "credentials/drive_token2.json",
         "capacity_gb": 150,
     },

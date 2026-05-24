@@ -26,12 +26,15 @@ def _merge_tags(dynamic: List[str]) -> List[str]:
     return list(seen)
 
 
+FOLLOW_LINE = "تابعونا للمزيد من المحتوى المسيحي ✝️"
+
+
 def generate_metadata(
     caption: str,
     filename: str,
     date: Optional[str] = None,
 ) -> Dict[str, object]:
-    """Call Gemini to produce an Arabic YouTube title and 5-8 dynamic tags.
+    """Call Gemini to produce an Arabic title, description, and dynamic tags.
 
     Args:
         caption:  Telegram video caption (Arabic text).
@@ -39,16 +42,18 @@ def generate_metadata(
         date:     Post date string (e.g. "2026-05-24"), used as context.
 
     Returns:
-        {'title': str, 'tags': list[str]}
-        where tags = YOUTUBE_FIXED_TAGS + dynamic tags (no duplicates).
+        {'title': str, 'description': str, 'tags': list[str]}
+        Tags = YOUTUBE_FIXED_TAGS + dynamic tags (no duplicates).
+        Description is 2-3 Arabic sentences ending with the channel follow line.
     """
     date_line = f"Post date: {date}" if date else ""
 
     prompt = f"""You are managing an Arabic Christian YouTube channel.
 
 Given the video information below, generate:
-1. A compelling Arabic YouTube title (max 100 characters) that reflects the caption content
-2. A list of 5–8 dynamic Arabic tags that are specific to this video's content
+1. A compelling Arabic YouTube title (max 100 characters) based on the caption content
+2. An Arabic YouTube description: 2-3 sentences summarising the video content
+3. A list of 5–8 dynamic Arabic tags specific to this video's content
 
 Video filename: {filename}
 {date_line}
@@ -57,14 +62,16 @@ Video caption: {caption or "Not provided"}
 Respond ONLY with valid JSON — no markdown fences, no explanation:
 {{
   "title": "العنوان هنا",
+  "description": "وصف الفيديو هنا.",
   "tags": ["وسم1", "وسم2", "وسم3"]
 }}
 
 Rules:
-- Title and tags must be in Arabic
-- Base title and tags on the actual caption content, not generic phrases
-- Title should be engaging and SEO-friendly for Arabic viewers
-- Tags must be specific keywords from the caption (topics, names, themes mentioned)"""
+- Title, description, and tags must all be in Arabic
+- Base everything on the actual caption content, not generic phrases
+- Title should be engaging and SEO-friendly
+- Description must be 2-3 sentences only — no bullet points, no hashtags
+- Tags must be specific keywords from the caption (topics, names, themes)"""
 
     try:
         response = _get_client().models.generate_content(
@@ -80,6 +87,11 @@ Rules:
         data = json.loads(raw)
 
         title = str(data.get("title") or filename)
+
+        description = str(data.get("description") or "")
+        if description and not description.endswith(FOLLOW_LINE):
+            description = description.rstrip() + "\n" + FOLLOW_LINE
+
         dynamic: List[str] = data.get("tags") or []
         if not isinstance(dynamic, list):
             dynamic = []
@@ -90,7 +102,7 @@ Rules:
             "Gemini generated title: %s  (%d fixed + %d dynamic = %d tags)",
             title, len(config.YOUTUBE_FIXED_TAGS), len(dynamic), len(tags),
         )
-        return {"title": title, "tags": tags}
+        return {"title": title, "description": description, "tags": tags}
 
     except (json.JSONDecodeError, KeyError, IndexError) as exc:
         log.warning("Gemini metadata parse failed (%s), using filename fallback", exc)
@@ -98,4 +110,8 @@ Rules:
         log.error("Gemini API error: %s", exc)
 
     fallback_title = filename.rsplit(".", 1)[0].replace("_", " ")
-    return {"title": fallback_title, "tags": list(config.YOUTUBE_FIXED_TAGS)}
+    return {
+        "title":       fallback_title,
+        "description": FOLLOW_LINE,
+        "tags":        list(config.YOUTUBE_FIXED_TAGS),
+    }

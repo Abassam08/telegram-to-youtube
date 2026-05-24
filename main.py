@@ -41,6 +41,7 @@ def download_job() -> None:
                 drive_file_id=file_id,
                 drive_account=account_name,
                 youtube_title=metadata["title"],
+                youtube_description=metadata.get("description", ""),
                 youtube_tags=metadata["tags"],
                 status="on_drive",
             )
@@ -82,9 +83,10 @@ def upload_job() -> None:
             video["drive_file_id"], video["drive_account"], local_path
         )
 
-        tags     = json.loads(video["youtube_tags"] or "[]")
-        video_id = youtube_uploader.upload_video(
-            local_path, video["youtube_title"], tags
+        tags        = json.loads(video["youtube_tags"] or "[]")
+        description = video.get("youtube_description") or ""
+        video_id    = youtube_uploader.upload_video(
+            local_path, video["youtube_title"], tags, description
         )
 
         database.update_video(

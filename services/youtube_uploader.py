@@ -37,7 +37,12 @@ def _get_service():
     return build("youtube", "v3", credentials=creds)
 
 
-def upload_video(local_path: str, title: str, tags: List[str]) -> str:
+def upload_video(
+    local_path: str,
+    title: str,
+    tags: List[str],
+    description: str = "",
+) -> str:
     """Upload a video file to YouTube.
 
     Returns the YouTube video_id on success.
@@ -48,7 +53,7 @@ def upload_video(local_path: str, title: str, tags: List[str]) -> str:
     body = {
         "snippet": {
             "title":       title[:100],
-            "description": "",
+            "description": description,
             "tags":        tags,
             "categoryId":  config.YOUTUBE_CATEGORY_ID,
         },
