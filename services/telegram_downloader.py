@@ -5,6 +5,7 @@ from typing import List, Dict
 from telethon import TelegramClient
 from telethon.tl.types import (
     DocumentAttributeFilename,
+    DocumentAttributeVideo,
     MessageMediaDocument,
 )
 
@@ -36,12 +37,14 @@ async def _download_videos(
             log.debug("Skipping already-seen message %s", message.id)
             continue
 
-        # derive filename from attribute or fall back to message id
+        # derive filename and duration from document attributes
         filename = f"tg_{message.id}.mp4"
+        duration = None
         for attr in doc.attributes:
             if isinstance(attr, DocumentAttributeFilename):
                 filename = attr.file_name
-                break
+            elif isinstance(attr, DocumentAttributeVideo):
+                duration = attr.duration
 
         caption   = message.text or ""
         post_date = message.date.strftime("%Y-%m-%d") if message.date else None
@@ -60,6 +63,7 @@ async def _download_videos(
                     "filename": filename,
                     "caption":  caption,
                     "date":     post_date,
+                    "duration": duration,
                     "path":     local_path,
                 }
             )

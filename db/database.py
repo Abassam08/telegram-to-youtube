@@ -27,10 +27,12 @@ def init_db() -> None:
                 local_path          TEXT,
                 drive_file_id       TEXT,
                 drive_account       TEXT,
+                duration            INTEGER,    -- seconds, from Telegram
                 youtube_video_id    TEXT,
                 youtube_title       TEXT,
                 youtube_description TEXT,
                 youtube_tags        TEXT,       -- JSON array
+                youtube_hashtags    TEXT,       -- JSON array
                 status              TEXT    NOT NULL DEFAULT 'pending',
                 -- pending | downloading | downloaded | on_drive | uploading | uploaded | failed
                 download_date       TEXT,       -- YYYY-MM-DD
@@ -47,12 +49,17 @@ def init_db() -> None:
                 UPDATE videos SET updated_at = datetime('now') WHERE id = NEW.id;
             END
         """)
-        # migrate existing databases that predate this column
-        try:
-            conn.execute("ALTER TABLE videos ADD COLUMN youtube_description TEXT")
-            log.info("Migrated DB: added youtube_description column")
-        except Exception:
-            pass  # column already exists
+        # migrate existing databases that predate these columns
+        for col, typedef in [
+            ("youtube_description", "TEXT"),
+            ("duration",            "INTEGER"),
+            ("youtube_hashtags",    "TEXT"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE videos ADD COLUMN {col} {typedef}")
+                log.info("Migrated DB: added %s column", col)
+            except Exception:
+                pass  # column already exists
     log.info("Database initialised at %s", config.DB_PATH)
 
 
@@ -86,8 +93,9 @@ def insert_video(
 def update_video(video_id: int, **kwargs: Any) -> None:
     if not kwargs:
         return
-    if "youtube_tags" in kwargs and isinstance(kwargs["youtube_tags"], list):
-        kwargs["youtube_tags"] = json.dumps(kwargs["youtube_tags"], ensure_ascii=False)
+    for list_col in ("youtube_tags", "youtube_hashtags"):
+        if list_col in kwargs and isinstance(kwargs[list_col], list):
+            kwargs[list_col] = json.dumps(kwargs[list_col], ensure_ascii=False)
     sets   = ", ".join(f"{k} = ?" for k in kwargs)
     values = list(kwargs.values()) + [video_id]
     with _conn() as conn:
