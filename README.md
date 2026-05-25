@@ -393,12 +393,12 @@ All settings live in `config.py`. Edit this file directly — no restart require
 | `YOUTUBE_CATEGORY_ID` | `"22"` | YouTube category ID. 22 = People & Blogs. See [full list](https://developers.google.com/youtube/v3/docs/videoCategories/list) |
 | `YOUTUBE_PRIVACY` | `"public"` | Upload visibility: `public`, `private`, or `unlisted` |
 | `YOUTUBE_FIXED_TAGS` | See below | Tags added to every video regardless of content |
-| `YOUTUBE_FIXED_HASHTAGS` | `["#مسيحي", "#يسوع", "#الكنيسة"]` | Hashtags always appended to every video |
+| `YOUTUBE_FIXED_HASHTAGS` | `["#مسيحي", "#", "#"]` | Hashtags always appended to every video |
 | `SHORTS_MAX_DURATION` | `60` | Videos at or under this many seconds are treated as YouTube Shorts |
 
 **Fixed tags** (always included):
 ```python
-["مسيحي", "يسوع", "مصر", "معاذ عليان", "محمود داوود", "زين_خير_الله", "الكنيسة"]
+[" عربي هندي مثال"]
 ```
 
 **Hashtag placement rules:**
