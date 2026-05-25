@@ -48,6 +48,8 @@ YOUTUBE_FIXED_TAGS: list[str] = [
     "مسيحي", "يسوع", "مصر", "معاذ عليان", "محمود داوود", "زين_خير_الله", "الكنيسة"
 ]
 
-# ── Scheduler (24-hour format) ────────────────────────────────────────────────
-DOWNLOAD_HOUR = 3                        # download job fires at 03:00 daily
-UPLOAD_HOURS  = [4, 7, 13, 14, 16, 21]     # one upload per entry, spread across the day
+# ── Scheduler ────────────────────────────────────────────────────────────────
+# All times are in Cairo time (Africa/Cairo, UTC+2) — audience timezone.
+SCHEDULER_TIMEZONE = "Africa/Cairo"
+DOWNLOAD_HOUR = 3                           # 03:00 Cairo
+UPLOAD_HOURS  = [4, 7, 13, 14, 16, 21]     # one upload per slot, spread across day

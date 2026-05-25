@@ -2,6 +2,7 @@ import json
 import os
 from datetime import date
 
+import pytz
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 import config
@@ -117,19 +118,63 @@ def upload_job() -> None:
     log.info("=== Upload job finished ===")
 
 
+def _cairo_now():
+    """Current time in Cairo (Africa/Cairo, UTC+2)."""
+    return __import__("datetime").datetime.now(pytz.timezone(config.SCHEDULER_TIMEZONE))
+
+
+def startup_catchup() -> None:
+    """Run any jobs that were scheduled for today (Cairo time) but missed before startup."""
+    cairo_now  = _cairo_now()
+    now_hour   = cairo_now.hour
+
+    log.info(
+        "Startup catchup check — Cairo time: %s",
+        cairo_now.strftime("%Y-%m-%d %H:%M %Z"),
+    )
+
+    # ── Download catchup ──────────────────────────────────────────────────────
+    # Missed if: the download hour has passed AND nothing was downloaded today
+    if now_hour > config.DOWNLOAD_HOUR and database.count_downloads_today() == 0:
+        log.info(
+            "Catchup: download slot (%02d:00 Cairo) was missed — running now",
+            config.DOWNLOAD_HOUR,
+        )
+        download_job()
+
+    # ── Upload catchup ────────────────────────────────────────────────────────
+    # Count upload slots that have already passed today in Cairo time
+    missed_slots  = sum(1 for h in config.UPLOAD_HOURS if h < now_hour)
+    uploads_done  = database.count_uploads_today()
+    pending_count = len(database.get_pending_uploads(limit=1))
+
+    if missed_slots > uploads_done and pending_count > 0:
+        log.info(
+            "Catchup: %d upload slot(s) passed today, only %d completed, "
+            "%d pending — running upload job now",
+            missed_slots, uploads_done, pending_count,
+        )
+        upload_job()
+
+
 def main() -> None:
     os.makedirs(config.TEMP_DOWNLOAD_DIR, exist_ok=True)
     os.makedirs(os.path.dirname(config.DB_PATH), exist_ok=True)
     database.init_db()
 
-    scheduler = BlockingScheduler()
+    tz = pytz.timezone(config.SCHEDULER_TIMEZONE)
+
+    startup_catchup()
+
+    scheduler = BlockingScheduler(timezone=tz)
 
     scheduler.add_job(download_job, "cron", hour=config.DOWNLOAD_HOUR, minute=0)
     for hour in config.UPLOAD_HOURS:
         scheduler.add_job(upload_job, "cron", hour=hour, minute=0)
 
     log.info(
-        "Scheduler started — download at %02d:00, uploads at %s",
+        "Scheduler started (timezone=%s) — download at %02d:00, uploads at %s",
+        config.SCHEDULER_TIMEZONE,
         config.DOWNLOAD_HOUR,
         config.UPLOAD_HOURS,
     )
