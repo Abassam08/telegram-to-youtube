@@ -11,7 +11,7 @@ TELEGRAM_SESSION  = "data/telegram_session"
 
 # ── Daily limits ──────────────────────────────────────────────────────────────
 MAX_DOWNLOADS_PER_DAY = 10
-MAX_UPLOADS_PER_DAY   = 5
+MAX_UPLOADS_PER_DAY   = 6
 
 # ── Local temp storage ────────────────────────────────────────────────────────
 TEMP_DOWNLOAD_DIR = "data/temp"
@@ -50,4 +50,4 @@ YOUTUBE_FIXED_TAGS: list[str] = [
 
 # ── Scheduler (24-hour format) ────────────────────────────────────────────────
 DOWNLOAD_HOUR = 3                        # download job fires at 03:00 daily
-UPLOAD_HOURS  = [4, 7, 13, 14, 16]     # one upload per entry, spread across the day
+UPLOAD_HOURS  = [4, 7, 13, 14, 16, 21]     # one upload per entry, spread across the day
