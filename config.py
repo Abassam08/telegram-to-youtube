@@ -48,6 +48,8 @@ YOUTUBE_FIXED_TAGS: list[str] = [
     "مسيحي", "يسوع", "مصر", "معاذ عليان", "محمود داوود", "زين_خير_الله", "الكنيسة"
 ]
 
+YOUTUBE_FIXED_HASHTAGS: list[str] = ["#مسيحي", "#يسوع", "#الكنيسة"]
+
 # ── Scheduler ────────────────────────────────────────────────────────────────
 # All times are in Cairo time (Africa/Cairo, UTC+2) — audience timezone.
 SCHEDULER_TIMEZONE = "Africa/Cairo"
