@@ -28,19 +28,14 @@ def download_job() -> None:
 
     for video in downloaded:
         try:
-            # 1. Push to Drive
-            file_id, account_name = drive_manager.upload_file(video["path"])
-
-            # 2. Generate Arabic title + tags via Gemini
+            # 1. Generate Arabic title + tags via Gemini
             metadata = claude_generator.generate_metadata(
                 video["caption"], video["filename"], video.get("date")
             )
 
-            # 3. Mark ready for YouTube upload
+            # 2. Mark ready for YouTube upload — file stays in data/temp/
             database.update_video(
                 video["db_id"],
-                drive_file_id=file_id,
-                drive_account=account_name,
                 duration=video.get("duration"),
                 youtube_title=metadata["title"],
                 youtube_description=metadata.get("description", ""),
@@ -49,7 +44,6 @@ def download_job() -> None:
                 status="on_drive",
             )
 
-            os.remove(video["path"])
             log.info("Video %d staged for upload: %s", video["db_id"], metadata["title"])
 
         except Exception as exc:
@@ -76,15 +70,25 @@ def upload_job() -> None:
         log.info("No videos pending upload")
         return
 
-    video      = pending[0]
-    local_path = os.path.join(config.TEMP_DOWNLOAD_DIR, video["original_filename"])
+    video         = pending[0]
+    drive_file_id = video["drive_file_id"] if video["drive_file_id"] else ""
 
     try:
-        log.info("Fetching from Drive: %s", video["drive_file_id"])
         database.update_video(video["id"], status="uploading")
-        drive_manager.download_file(
-            video["drive_file_id"], video["drive_account"], local_path
-        )
+
+        if drive_file_id:
+            # backward compat: record was previously uploaded to Drive
+            local_path = os.path.join(config.TEMP_DOWNLOAD_DIR, video["original_filename"])
+            log.info("Fetching from Drive: %s", drive_file_id)
+            drive_manager.download_file(drive_file_id, video["drive_account"], local_path)
+        else:
+            # new path: file is already on disk in data/temp/
+            local_path = video["local_path"] or os.path.join(
+                config.TEMP_DOWNLOAD_DIR, video["original_filename"]
+            )
+            if not os.path.exists(local_path):
+                raise FileNotFoundError(f"Local file not found: {local_path}")
+            log.info("Uploading directly from local file: %s", local_path)
 
         tags        = json.loads(video["youtube_tags"]     or "[]")
         hashtags    = json.loads(video["youtube_hashtags"] or "[]")
@@ -102,18 +106,21 @@ def upload_job() -> None:
             upload_date=date.today().isoformat(),
         )
 
-        # clean up Drive (DB record is kept forever)
-        drive_manager.delete_file(video["drive_file_id"], video["drive_account"])
-        log.info("Video %d uploaded and cleaned up from Drive", video["id"])
+        if drive_file_id:
+            drive_manager.delete_file(drive_file_id, video["drive_account"])
+            log.info("Video %d uploaded and cleaned up from Drive", video["id"])
+        else:
+            os.remove(local_path)
+            log.info("Video %d uploaded and local file removed", video["id"])
 
     except Exception as exc:
         log.error("Upload failed for video %d: %s", video["id"], exc)
-        # revert to on_drive so it will be retried next upload slot
         database.update_video(video["id"], status="on_drive", error_message=str(exc))
-
-    finally:
-        if os.path.exists(local_path):
-            os.remove(local_path)
+        # if we fetched from Drive, delete the local temp copy we created
+        if drive_file_id:
+            local_path = os.path.join(config.TEMP_DOWNLOAD_DIR, video["original_filename"])
+            if os.path.exists(local_path):
+                os.remove(local_path)
 
     log.info("=== Upload job finished ===")
 
