@@ -149,8 +149,12 @@ def startup_catchup() -> None:
         download_job()
 
     # ── Upload catchup ────────────────────────────────────────────────────────
-    # Count upload slots that have already passed today in Cairo time
-    missed_slots  = sum(1 for h in config.UPLOAD_HOURS if h < now_hour)
+    # Count upload slots whose HH:MM has already passed today in Cairo time
+    now_hhmm      = (cairo_now.hour, cairo_now.minute)
+    missed_slots  = sum(
+        1 for t in config.UPLOAD_TIMES
+        if tuple(int(x) for x in t.split(":")) < now_hhmm
+    )
     uploads_done  = database.count_uploads_today()
     pending_count = len(database.get_pending_uploads(limit=1))
 
@@ -175,14 +179,15 @@ def main() -> None:
     scheduler = BlockingScheduler(timezone=tz)
 
     scheduler.add_job(download_job, "cron", hour=config.DOWNLOAD_HOUR, minute=0)
-    for hour in config.UPLOAD_HOURS:
-        scheduler.add_job(upload_job, "cron", hour=hour, minute=0)
+    for t in config.UPLOAD_TIMES:
+        h, m = (int(x) for x in t.split(":"))
+        scheduler.add_job(upload_job, "cron", hour=h, minute=m)
 
     log.info(
         "Scheduler started (timezone=%s) — download at %02d:00, uploads at %s",
         config.SCHEDULER_TIMEZONE,
         config.DOWNLOAD_HOUR,
-        config.UPLOAD_HOURS,
+        config.UPLOAD_TIMES,
     )
     try:
         scheduler.start()
