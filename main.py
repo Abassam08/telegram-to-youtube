@@ -93,10 +93,9 @@ def upload_job() -> None:
         tags        = json.loads(video["youtube_tags"]     or "[]")
         hashtags    = json.loads(video["youtube_hashtags"] or "[]")
         description = video.get("youtube_description") or ""
-        duration    = video.get("duration")
         video_id    = youtube_uploader.upload_video(
             local_path, video["youtube_title"], tags,
-            description, hashtags, duration,
+            description, hashtags,
         )
 
         database.update_video(

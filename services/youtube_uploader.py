@@ -41,23 +41,12 @@ def _apply_hashtags(
     title: str,
     description: str,
     hashtags: List[str],
-    duration: Optional[int],
 ) -> tuple[str, str]:
-    """Append hashtags to title (Shorts) or description (regular video)."""
+    """Append hashtags to the description."""
     if not hashtags:
         return title, description
-
-    hashtag_str = " ".join(hashtags)
-    is_short    = duration is not None and duration <= config.SHORTS_MAX_DURATION
-
-    if is_short:
-        # keep total title within 100 chars
-        max_base = 100 - len(hashtag_str) - 1
-        final_title = f"{title[:max_base].rstrip()} {hashtag_str}"
-        return final_title, description
-    else:
-        final_desc = description.rstrip() + "\n\n" + hashtag_str
-        return title, final_desc
+    final_desc = description.rstrip() + "\n\n" + " ".join(hashtags)
+    return title, final_desc
 
 
 def upload_video(
@@ -66,18 +55,12 @@ def upload_video(
     tags: List[str],
     description: str = "",
     hashtags: Optional[List[str]] = None,
-    duration: Optional[int] = None,
 ) -> str:
-    """Upload a video file to YouTube.
-
-    Hashtags are appended to the title for Shorts (duration <= SHORTS_MAX_DURATION)
-    or to the description for regular videos.
-
-    Returns the YouTube video_id on success.
+    """Upload a video file to YouTube. Returns the video_id on success.
     Raises on API / quota errors so the caller can mark the job for retry.
     """
     final_title, final_description = _apply_hashtags(
-        title, description, hashtags or [], duration
+        title, description, hashtags or []
     )
     service = _get_service()
 
