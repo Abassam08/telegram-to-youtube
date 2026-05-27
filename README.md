@@ -26,16 +26,19 @@ Automated pipeline that monitors a Telegram channel, downloads new videos, gener
 
 This project automates the full lifecycle of reposting Arabic Christian video content from a private Telegram channel to a public YouTube channel:
 
-1. **Downloads** up to 10 videos per day from a Telegram channel using the Telethon library
-2. **Stores** each video on Google Drive (across two accounts for storage redundancy)
-3. **Generates** an Arabic YouTube title, description, tags, and hashtags using the Google Gemini API — based on the video's original Telegram caption
-4. **Uploads** videos to YouTube at scheduled intervals (up to 6 per day), spread across the day to avoid quota issues
-5. **Cleans up** the Drive copy after a confirmed YouTube upload
-6. **Tracks** every video in a local SQLite database to prevent duplicate downloads or uploads — forever
+1. **Downloads** up to 10 videos per day from a Telegram channel using the Telethon library, saving them to `data/temp/`
+2. **Generates** an Arabic YouTube title, description, tags, and hashtags using the Google Gemini API — based on the video's original Telegram caption — in the same step as the download
+3. **Uploads** videos to YouTube at scheduled intervals (up to 6 per day), directly from `data/temp/`, spread across the day to avoid quota issues
+4. **Cleans up** the local temp file after a confirmed YouTube upload
+5. **Tracks** every video in a local SQLite database to prevent duplicate downloads or uploads — forever
 
 ### Why it was built
 
 Managing a YouTube channel that reposts content from Telegram is tedious when done manually: downloading files, writing Arabic titles, adding tags, scheduling uploads. This project eliminates all of that. It runs continuously on a free Oracle Cloud VM, wakes up on a schedule, and handles everything automatically — including detecting YouTube Shorts (videos under 60 seconds) and formatting their metadata differently.
+
+### Google Drive
+
+Google Drive is **not required** for normal operation. The pipeline downloads directly to `data/temp/` and uploads from there to YouTube. Drive credentials are only used as a backward-compatibility path for any existing DB records that already have a `drive_file_id` from a previous pipeline version.
 
 ---
 
@@ -49,51 +52,50 @@ Managing a YouTube channel that reposts content from Telegram is tedious when do
                                │  Telethon  (≤10 videos/day)
                                ▼
                     ┌─────────────────────┐
-                    │   data/temp/        │  Local scratch space
-                    │   (video file)      │  Files deleted after Drive upload
+                    │   data/temp/        │  Local storage
+                    │   (video file)      │  File deleted after YouTube upload
                     └──────────┬──────────┘
                                │
-               ┌───────────────┼───────────────┐
-               │               │               │
-               ▼               ▼               ▼
-     ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
-     │  Google      │  │  Google      │  │  Gemini AI       │
-     │  Drive       │  │  Drive       │  │  (metadata gen)  │
-     │  account1    │  │  account2    │  │                  │
-     │  122 GB      │  │  150 GB      │  │  • Arabic title  │
-     └──────┬───────┘  └──────┬───────┘  │  • Description   │
-            └─────────────────┘          │  • Tags          │
-                     │                   │  • Hashtags      │
-                     │  ◄────────────────┘                  │
-                     │  (metadata stored in SQLite)         │
-                     │                                      │
-                     │  Drive → download → YouTube upload   │
-                     ▼                                      │
-          ┌──────────────────────┐                         │
-          │   YouTube Channel    │                         │
-          │   (public upload)    │◄────────────────────────┘
-          │   ≤6 videos/day      │
-          └──────────┬───────────┘
-                     │  After confirmed upload
-                     ▼
-          Drive file deleted  ──►  SQLite record kept forever
-                                   (prevents re-download)
+                               ▼
+                    ┌──────────────────────┐
+                    │  Gemini AI           │  Runs immediately after download,
+                    │  (metadata gen)      │  in the same download_job() call
+                    │                      │
+                    │  • Arabic title      │
+                    │  • Description       │
+                    │  • Tags              │
+                    │  • Hashtags          │
+                    └──────────┬───────────┘
+                               │  (all metadata saved to SQLite, status = on_drive)
+                               │
+                               │  At each upload slot (≤6/day)
+                               ▼
+                    ┌──────────────────────┐
+                    │   YouTube Channel    │
+                    │   (public upload)    │
+                    │   direct from        │
+                    │   data/temp/         │
+                    └──────────┬───────────┘
+                               │  After confirmed upload
+                               ▼
+                    Local file deleted  ──►  SQLite record kept forever
+                                             (prevents re-download)
 ```
 
 ### Data flow summary
 
 | Step | What happens | Where |
 |------|-------------|-------|
-| 1 | Scheduler wakes at 03:00 | `main.py` |
+| 1 | Scheduler wakes at 03:00 Cairo time | `main.py` |
 | 2 | Fetch new video messages from Telegram | `telegram_downloader.py` |
 | 3 | Skip message IDs already in DB | `database.py` |
 | 4 | Download video to `data/temp/` | `telegram_downloader.py` |
-| 5 | Upload to Drive (account with most free space first) | `drive_manager.py` |
-| 6 | Generate title, description, tags, hashtags via Gemini | `claude_generator.py` |
-| 7 | Save all metadata + Drive file ID to SQLite | `database.py` |
-| 8 | Delete local temp file | `main.py` |
-| 9 | At each upload slot: fetch from Drive, upload to YouTube | `youtube_uploader.py` |
-| 10 | Mark DB record as `uploaded`, delete from Drive | `main.py` |
+| 5 | Generate title, description, tags, hashtags via Gemini | `claude_generator.py` |
+| 6 | Save all metadata to SQLite, set `status = on_drive` | `database.py` |
+| 7 | At each upload slot: upload directly from `data/temp/` to YouTube | `youtube_uploader.py` |
+| 8 | Mark DB record as `uploaded`, delete local temp file | `main.py` |
+
+> **Steps 4–6 all happen inside `download_job()`** — by the time the job finishes, every downloaded video already has its full metadata in the DB and is ready to upload.
 
 ---
 
@@ -102,8 +104,7 @@ Managing a YouTube channel that reposts content from Telegram is tedious when do
 | Component | Tool / Library | Purpose |
 |-----------|---------------|---------|
 | Telegram client | `telethon` 1.43+ | Download videos from Telegram channels |
-| Drive storage | `google-api-python-client` | Two-account Google Drive buffer |
-| AI metadata | `google-genai` (Gemini 2.0) | Generate Arabic titles, tags, hashtags |
+| AI metadata | `google-genai` (Gemini) | Generate Arabic titles, tags, hashtags |
 | YouTube upload | YouTube Data API v3 | Publish videos with full metadata |
 | Scheduler | `APScheduler` 3.11+ | Cron-based download and upload jobs |
 | Database | SQLite (stdlib) | Deduplication and state tracking |
@@ -121,7 +122,6 @@ Before starting, you need accounts and access to the following:
 |-------------|----------------|-------|
 | Telegram account | telegram.org | Must be a real account (not a bot) to read channels |
 | Telegram API credentials | my.telegram.org/apps | Free, instant |
-| Google account for Drive (×2) | google.com | Two separate accounts for storage redundancy |
 | Google account for YouTube | google.com | The channel you want to upload to |
 | Google Cloud project | console.cloud.google.com | Free tier is sufficient |
 | Gemini API key | aistudio.google.com | Free tier available |
@@ -152,15 +152,12 @@ These go into your `.env` file as `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, and `T
 
 ---
 
-### c. Enable Drive API and YouTube Data API v3
+### c. Enable YouTube Data API v3
 
 From inside your Google Cloud project:
 
 1. Go to **APIs & Services → Library**
-2. Search for **"Google Drive API"** → click it → **Enable**
-3. Search for **"YouTube Data API v3"** → click it → **Enable**
-
-Both must be enabled before creating credentials.
+2. Search for **"YouTube Data API v3"** → click it → **Enable**
 
 ---
 
@@ -175,10 +172,7 @@ Before you can create OAuth credentials, Google requires an OAuth consent screen
    - **User support email**: your email
    - **Developer contact**: your email
 4. Click **Save and Continue** through the Scopes page (no scopes needed here)
-5. On the **Test users** page, add **all three Google accounts** you will use:
-   - Your primary Drive account email
-   - Your secondary Drive account email
-   - Your YouTube channel account email
+5. On the **Test users** page, add your YouTube channel account email
 6. Click **Save and Continue** → **Back to Dashboard**
 
 > **Why test users?** While the app is in "Testing" mode, only listed test users can authorize it. You do not need to publish the app.
@@ -187,61 +181,27 @@ Before you can create OAuth credentials, Google requires an OAuth consent screen
 
 ### e. Creating OAuth Credentials
 
-You need **two separate OAuth client ID files** — one for Drive and one for YouTube — because they use different scopes.
-
-#### Drive credentials
+#### YouTube credentials
 
 1. Go to **APIs & Services → Credentials** → **Create Credentials → OAuth client ID**
 2. Application type: **Desktop app**
-3. Name: `Drive Client`
+3. Name: `YouTube Client`
 4. Click **Create** → **Download JSON**
-5. Save the downloaded file as: `credentials/drive_client_secrets.json`
-
-#### YouTube credentials
-
-1. Repeat the above steps
-2. Name: `YouTube Client`
-3. Save as: `credentials/youtube_client_secrets.json`
+5. Save the downloaded file as: `credentials/youtube_client_secrets.json`
 
 ---
 
-### f. Authorizing Drive Accounts (one-time per account)
-
-Each Drive account needs its own OAuth token. You authorize them by running the auth scripts, which open a browser URL.
-
-> **WSL / headless servers**: The scripts print a URL instead of opening a browser automatically. Copy the URL, open it in any browser, sign in with the correct Google account, and the authorization completes automatically via the local callback server.
-
-**Authorize Drive account 1** (primary — `abassam912@gmail.com`):
-
-```bash
-cd ~/telegram-to-youtube
-source .venv/bin/activate
-python auth_drive3.py
-```
-
-When prompted, sign in as your **primary Drive account**. The token is saved to `credentials/drive_token1.json`.
-
-**Authorize Drive account 2** (secondary — `ahmedindiaytube2025@gmail.com`):
-
-```bash
-python auth_drive2.py
-```
-
-Sign out of Google in your browser first (or use a private/incognito window), then sign in as your **secondary Drive account**. Token saved to `credentials/drive_token2.json`.
-
----
-
-### g. Authorizing YouTube (one-time)
+### f. Authorizing YouTube (one-time)
 
 ```bash
 python auth_youtube.py
 ```
 
-Sign in as your **YouTube channel account** (`ahmedbcan@gmail.com`). Token saved to `credentials/youtube_token.json`.
+Sign in as your **YouTube channel account**. Token saved to `credentials/youtube_token.json`.
 
 ---
 
-### h. Gemini API Setup
+### g. Gemini API Setup
 
 1. Go to **https://aistudio.google.com**
 2. Click **"Get API key"** → **"Create API key"**
@@ -255,7 +215,7 @@ Sign in as your **YouTube channel account** (`ahmedbcan@gmail.com`). Token saved
 
 ---
 
-### i. Environment Variables (.env setup)
+### h. Environment Variables (.env setup)
 
 Copy the example file and fill in your values:
 
@@ -286,7 +246,7 @@ OCI_SUBNET_ID=ocid1.subnet.oc1.iad.xxxxx
 
 ---
 
-### j. Install Dependencies and Run verify.py
+### i. Install Dependencies and Run verify.py
 
 ```bash
 cd ~/telegram-to-youtube
@@ -308,8 +268,6 @@ Verifying services…
 
   DB           ✅  data/videos.db initialised
   Telegram     ✅  signed in as @yourusername  |  channel: Your Channel Name
-  Drive (account1)  ✅  primary@gmail.com  |  11 / 122 GB used  |  111 GB free
-  Drive (account2)  ✅  secondary@gmail.com  |  63 / 200 GB used  |  137 GB free
   YouTube      ✅  token valid  |  scopes=[...]
   Gemini       ✅  model=gemini-flash-lite-latest  reply='ok'
 
@@ -320,7 +278,7 @@ If any service shows ❌, see the [Troubleshooting](#10-troubleshooting) section
 
 ---
 
-### k. Authorize Telegram Session (one-time)
+### j. Authorize Telegram Session (one-time)
 
 The first time Telethon connects, it needs your phone number and a confirmation code sent to your Telegram account. Run this once interactively:
 
@@ -332,7 +290,7 @@ Enter your phone number (with country code, e.g. `+201234567890`), then enter th
 
 ---
 
-### l. Running the Pipeline
+### k. Running the Pipeline
 
 ```bash
 source .venv/bin/activate
@@ -369,14 +327,6 @@ All settings live in `config.py`. Edit this file directly — no restart require
 | `MAX_DOWNLOADS_PER_DAY` | `10` | Maximum videos downloaded from Telegram per day |
 | `MAX_UPLOADS_PER_DAY` | `6` | Maximum videos uploaded to YouTube per day |
 
-### Google Drive
-
-| Setting | Description |
-|---------|-------------|
-| `DRIVE_CLIENT_SECRETS` | Path to `credentials/drive_client_secrets.json` |
-| `DRIVE_FOLDER_NAME` | Name of the folder created in each Drive account (`"telegram-videos"`) |
-| `DRIVE_ACCOUNTS` | List of Drive account configs. Each has `name`, `token_file`, `capacity_gb`. Accounts are tried in order — the first with enough free space is used. |
-
 ### Gemini AI
 
 | Setting | Default | Description |
@@ -392,14 +342,9 @@ All settings live in `config.py`. Edit this file directly — no restart require
 | `YOUTUBE_TOKEN` | `credentials/youtube_token.json` | Saved OAuth token (auto-refreshed) |
 | `YOUTUBE_CATEGORY_ID` | `"22"` | YouTube category ID. 22 = People & Blogs. See [full list](https://developers.google.com/youtube/v3/docs/videoCategories/list) |
 | `YOUTUBE_PRIVACY` | `"public"` | Upload visibility: `public`, `private`, or `unlisted` |
-| `YOUTUBE_FIXED_TAGS` | See below | Tags added to every video regardless of content |
-| `YOUTUBE_FIXED_HASHTAGS` | `["#مسيحي", "#", "#"]` | Hashtags always appended to every video |
+| `YOUTUBE_FIXED_TAGS` | See `config.py` | Tags added to every video regardless of content |
+| `YOUTUBE_FIXED_HASHTAGS` | See `config.py` | Hashtags always appended to every video |
 | `SHORTS_MAX_DURATION` | `60` | Videos at or under this many seconds are treated as YouTube Shorts |
-
-**Fixed tags** (always included):
-```python
-[" عربي هندي مثال"]
-```
 
 **Hashtag placement rules:**
 - **Shorts** (duration ≤ 60s): hashtags appended to the **title** (within 100-char limit)
@@ -409,6 +354,7 @@ All settings live in `config.py`. Edit this file directly — no restart require
 
 | Setting | Default | Description |
 |---------|---------|-------------|
+| `SCHEDULER_TIMEZONE` | `Africa/Cairo` | All schedule times are interpreted in this timezone |
 | `DOWNLOAD_HOUR` | `3` | Hour (0–23) when the daily download job runs |
 | `UPLOAD_HOURS` | `[4, 7, 13, 14, 16, 21]` | List of hours when upload jobs run. One video per slot. |
 
@@ -460,7 +406,13 @@ scp -r credentials/ ubuntu@<ip>:~/telegram-to-youtube/
 
 ### 7b. Run as a systemd service
 
-Create the service file on the VM:
+The included `setup_service.sh` script handles everything automatically:
+
+```bash
+bash setup_service.sh
+```
+
+Or create the service file manually:
 
 ```bash
 sudo nano /etc/systemd/system/tg2yt.service
@@ -504,39 +456,43 @@ sudo journalctl -u tg2yt -f        # live log tail
 
 ## 8. Scheduler Explained
 
-The pipeline uses `APScheduler` with cron triggers. There are two job types:
+The pipeline uses `APScheduler` with cron triggers. All times are in **Cairo time** (`Africa/Cairo`, UTC+2). There are two job types:
 
 ### Download job
 
-Runs **once per day at 03:00**. Logic:
+Runs **once per day at 03:00 Cairo time**. Logic:
 
 1. Check how many videos were already downloaded today
 2. Calculate remaining slots: `MAX_DOWNLOADS_PER_DAY − already_downloaded`
 3. Iterate through the last 200 Telegram messages, skipping any already in the DB
 4. Download up to the remaining count, saving to `data/temp/`
-5. For each downloaded file:
-   - Upload to the Drive account with the most free space
+5. **For each downloaded file, in the same job**:
    - Call Gemini to generate title, description, tags, and hashtags
-   - Save everything to SQLite (`status = on_drive`)
-   - Delete the local temp file
+   - Save all metadata to SQLite (`status = on_drive`)
+6. File stays in `data/temp/` — ready for the upload job to pick up
+
+> `download_job()` handles both downloading **and** metadata generation in one step. By the time it completes, every video is fully staged with title, tags, and hashtags already in the DB.
 
 ### Upload jobs
 
-Run **6 times per day** at: `04:00, 07:00, 13:00, 14:00, 16:00, 21:00`
+Run **6 times per day** at: `04:00, 07:00, 13:00, 14:00, 16:00, 21:00` (Cairo time)
 
 Each slot uploads **exactly one video**. Logic:
 
 1. Check how many were already uploaded today
 2. If the daily cap is reached, skip
 3. Fetch the oldest `on_drive` video from the DB
-4. Download it back from Drive to `data/temp/`
-5. Upload to YouTube with full metadata (title, description, tags, hashtags, correct privacy)
-6. On success: mark DB record as `uploaded`, delete the Drive copy
-7. On failure: revert status to `on_drive` so the next slot retries automatically
+4. Upload directly from `data/temp/` to YouTube with full metadata
+5. On success: mark DB record as `uploaded`, delete the local file from `data/temp/`
+6. On failure: revert status to `on_drive` so the next slot retries automatically
+
+### Startup catchup
+
+When `main.py` starts, it checks whether any scheduled jobs were missed since midnight (Cairo time) and runs them immediately. This means the pipeline recovers automatically after a reboot or crash without waiting for the next scheduled slot.
 
 ### Why this spacing?
 
-- Downloads at **03:00** ensure videos are staged on Drive before the first upload at **04:00**
+- Downloads at **03:00** ensure videos are staged with metadata before the first upload at **04:00**
 - Spreading uploads across the day avoids hitting YouTube's daily quota in a burst
 - Retries are free: a failed upload will be automatically picked up by the next slot
 
@@ -553,13 +509,13 @@ The SQLite database lives at `data/videos.db`. It has one table: `videos`.
 | `telegram_channel` | TEXT | Channel username (e.g. `@memovideos`) |
 | `original_filename` | TEXT | Filename as received from Telegram |
 | `caption` | TEXT | Original Telegram caption (Arabic) |
-| `local_path` | TEXT | Temp file path while downloading (cleared after Drive upload) |
+| `local_path` | TEXT | Path to the file in `data/temp/` (cleared after upload) |
 | `duration` | INTEGER | Video duration in seconds (from Telegram metadata) |
-| `drive_file_id` | TEXT | Google Drive file ID — used to download and later delete |
-| `drive_account` | TEXT | `account1` or `account2` |
+| `drive_file_id` | TEXT | Google Drive file ID — only set for legacy records |
+| `drive_account` | TEXT | Drive account name — only set for legacy records |
 | `youtube_video_id` | TEXT | YouTube video ID after successful upload |
 | `youtube_title` | TEXT | Generated Arabic title |
-| `youtube_description` | TEXT | Generated Arabic description (2–3 sentences + follow line) |
+| `youtube_description` | TEXT | Generated Arabic description (2–3 sentences) |
 | `youtube_tags` | TEXT | JSON array of Arabic tags (fixed + dynamic) |
 | `youtube_hashtags` | TEXT | JSON array of Arabic hashtags (fixed + dynamic) |
 | `status` | TEXT | Current pipeline state (see below) |
@@ -579,11 +535,13 @@ pending → downloading → downloaded → on_drive → uploading → uploaded
 | Status | Meaning |
 |--------|---------|
 | `downloading` | Currently being downloaded from Telegram |
-| `downloaded` | Saved to local temp, not yet on Drive |
-| `on_drive` | On Google Drive, waiting for YouTube upload slot |
+| `downloaded` | Saved to local temp, metadata not yet generated |
+| `on_drive` | Metadata generated, file in `data/temp/`, waiting for upload slot |
 | `uploading` | Currently being uploaded to YouTube |
-| `uploaded` | Live on YouTube, Drive copy deleted |
+| `uploaded` | Live on YouTube, local file deleted |
 | `failed` | An error occurred — check `error_message` column |
+
+> **Important**: `upload_job()` only picks up videos with `status = on_drive`. A video stuck in `downloaded` or any other state will not be uploaded until its status is corrected manually.
 
 ### Useful queries
 
@@ -604,6 +562,9 @@ SELECT original_filename, error_message FROM videos WHERE status = 'failed';
 
 -- How many videos downloaded today
 SELECT COUNT(*) FROM videos WHERE download_date = date('now');
+
+-- Reset a stuck video back to on_drive so it gets retried
+UPDATE videos SET status = 'on_drive', error_message = NULL WHERE id = <id>;
 ```
 
 ---
@@ -623,20 +584,6 @@ Telegram is rate-limiting you. The error message includes how many seconds to wa
 
 ---
 
-### Google Drive
-
-**`insufficient free space` on account1, falling back to account2**
-Normal behavior — Drive is auto-selecting the account with more space. If both fail, reduce `capacity_gb` thresholds in `config.py` or free up Drive space.
-
-**`invalid_grant` or `Token has been expired or revoked`**
-The OAuth token has expired and cannot be refreshed (this happens if you change your Google password or revoke access). Re-run the corresponding auth script:
-```bash
-python auth_drive3.py   # for account1
-python auth_drive2.py   # for account2
-```
-
----
-
 ### YouTube
 
 **`quotaExceeded`**
@@ -653,10 +600,44 @@ YouTube detected that the same video was uploaded before (content ID match). The
 ### Gemini
 
 **`429 RESOURCE_EXHAUSTED` with `limit: 0`**
-The free tier quota for the selected model is 0 — the model requires billing to be enabled. Switch to `gemini-flash-lite-latest` in `config.py` (this is the model with free-tier access on this key).
+The free tier quota for the selected model is 0 — the model requires billing to be enabled. Switch to `gemini-flash-lite-latest` in `config.py` (this is the model with free-tier access).
 
 **Gemini returns non-JSON / parse failed**
 The model occasionally wraps JSON in markdown code fences. The parser strips these automatically. If it still fails, the script falls back to using the filename as the title and fixed tags/hashtags only.
+
+---
+
+### Configuration
+
+**`ModuleNotFoundError: No module named 'pytz'`**
+`pytz` was dropped from the virtual environment, likely after a Python version upgrade that invalidated the old `.venv`. Rebuild it:
+```bash
+rm -rf .venv
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+**`AttributeError: module 'config' has no attribute 'YOUTUBE_FIXED_HASHTAGS'`**
+`YOUTUBE_FIXED_HASHTAGS` and `SHORTS_MAX_DURATION` are missing from `config.py`. Add them:
+```python
+YOUTUBE_FIXED_HASHTAGS: list[str] = ["#مسيحي", "#يسوع", "#الكنيسة"]
+SHORTS_MAX_DURATION = 60
+```
+
+**Videos stuck in `downloaded` status and never uploaded**
+`upload_job()` only picks up videos with `status = on_drive`. If metadata generation failed during `download_job()`, the status may not have been advanced. Check `error_message` in the DB, fix the underlying issue (e.g. Gemini quota), then reset:
+```sql
+UPDATE videos SET status = 'on_drive', error_message = NULL
+WHERE status = 'downloaded';
+```
+
+**`download_job()` runs but no videos appear in the DB**
+Always trigger jobs through `main.py`, not by calling service functions directly. Running `telegram_downloader.run()` directly bypasses the DB cap checks and status updates. Use:
+```python
+from main import download_job
+download_job()
+```
 
 ---
 
@@ -666,7 +647,7 @@ The model occasionally wraps JSON in markdown code fences. The parser strips the
 The virtual environment is not active. Run `source .venv/bin/activate` first.
 
 **The scheduler starts but never runs jobs**
-Check that your system clock is correct (`date` command). APScheduler uses local time. On a fresh VM you may need: `sudo timedatectl set-timezone UTC` or your preferred timezone.
+Check that your system clock is correct (`date` command). APScheduler uses the configured timezone (`Africa/Cairo`). On a fresh VM: `sudo timedatectl set-timezone UTC` is fine — the scheduler converts internally via `pytz`.
 
 **`data/videos.db` is locked**
 Another instance of `main.py` is already running. Find and stop it: `pkill -f main.py`.
@@ -679,7 +660,6 @@ Another instance of `main.py` is already running. Find and stop it: `pkill -f ma
 - **Multi-channel support**: Extend `config.py` to support multiple source Telegram channels with separate YouTube destinations
 - **Upload queue prioritization**: Let certain videos (e.g. those with longer captions) skip the queue
 - **Telegram bot notifications**: Send a Telegram message to a private chat when each YouTube upload completes, with the video link
-- **Retry backoff**: Implement exponential backoff for failed uploads rather than a flat 5-minute wait
-- **Dashboard**: A simple Flask/FastAPI web page showing pipeline stats from the SQLite DB (uploaded count, queue depth, Drive usage)
+- **Retry backoff**: Implement exponential backoff for failed uploads rather than a flat retry at the next scheduled slot
+- **Dashboard**: A simple Flask/FastAPI web page showing pipeline stats from the SQLite DB (uploaded count, queue depth, error rate)
 - **YouTube analytics feedback**: Pull view counts from the YouTube API after 7 days and log them to the DB for performance tracking
-- **Drive cleanup job**: A weekly scheduled job to detect and remove orphaned Drive files (files in Drive with no matching DB record)

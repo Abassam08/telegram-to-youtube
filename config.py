@@ -45,7 +45,7 @@ YOUTUBE_TOKEN          = "credentials/youtube_token.json"
 YOUTUBE_CATEGORY_ID    = "22"    # People & Blogs
 YOUTUBE_PRIVACY        = "public"  # public | private | unlisted
 YOUTUBE_FIXED_TAGS: list[str] = [
-    "مسيحي", "يسوع", "مصر", "معاذ عليان", "محمود داوود", "زين_خير_الله", "الكنيسة"
+    "مسيحي", "يسوع", "مصر", "معاذ عليان", "محمود داود", "زين_خير_الله", "الكنيسة"
 ]
 
 YOUTUBE_FIXED_HASHTAGS: list[str] = ["#مسيحي", "#يسوع", "#الكنيسة"]
