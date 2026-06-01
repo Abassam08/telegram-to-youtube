@@ -18,23 +18,45 @@ def _get_client() -> genai.Client:
     return _client
 
 
-FOLLOW_LINE = "تابعونا للمزيد من المحتوى المسيحي ✝️"
+_IDENTITY_LINE = (
+    "قناة متخصصة في حوارات معاذ عليان ومحمود داود ومقارنة الأديان والحوار الإسلامي المسيحي"
+)
 
+_SEO_FOOTER = (
+    "---\n"
+    "معاذ عليان | محمود داود | حوار إسلامي مسيحي\n"
+    "مقارنة أديان | الرد على الشبهات | moaz alian\n"
+    "mahmoud dawood | islamic christian debate\n"
+    "حوارات مفتوحة | مناظرات إسلامية مسيحية"
+)
 
-def _merge_tags(dynamic: List[str]) -> List[str]:
-    """Fixed tags first, then dynamic — deduplicated, order preserved."""
-    seen: dict[str, None] = {}
-    for tag in config.YOUTUBE_FIXED_TAGS + dynamic:
-        seen[tag] = None
-    return list(seen)
+_P1_TAGS = [
+    "معاذ عليان", "محمود داود", "moaz alian",
+    "mahmoud dawood", "حوار إسلامي مسيحي", "مقارنة أديان",
+]
+
+_P3_TAGS = [
+    "الرد على الشبهات", "حوارات مفتوحة",
+    "islamic christian debate", "مناظرات دينية",
+]
 
 
 def _merge_hashtags(dynamic: List[str]) -> List[str]:
-    """Fixed hashtags first, then 1-2 dynamic ones — deduplicated."""
+    """Fixed hashtags first, then 1-2 dynamic ones — deduplicated, order preserved."""
     seen: dict[str, None] = {}
     for tag in config.YOUTUBE_FIXED_HASHTAGS + dynamic:
         seen[tag] = None
     return list(seen)
+
+
+def _build_tags(dynamic: List[str]) -> List[str]:
+    """P1 (6 hardcoded) + P2 (up to 5 dynamic) + P3 (4 hardcoded), trimmed to ≤490 chars."""
+    p2 = dynamic[:5]
+    tags = list(_P1_TAGS) + p2 + list(_P3_TAGS)
+    min_len = len(_P1_TAGS) + len(p2)
+    while len(", ".join(tags)) > 490 and len(tags) > min_len:
+        tags.pop()
+    return tags
 
 
 def generate_metadata(
@@ -52,21 +74,22 @@ def generate_metadata(
     Returns:
         {
             'title':       str,           # clean title, no hashtags
-            'description': str,           # 2-3 sentences + follow line, no hashtags
-            'tags':        list[str],     # FIXED_TAGS + dynamic tags
+            'description': str,           # structured description with fixed SEO sections
+            'tags':        list[str],     # P1 (6) + 5 dynamic + P3 (4) = 15 tags
             'hashtags':    list[str],     # FIXED_HASHTAGS + 1-2 dynamic hashtags
         }
         Hashtag placement (Shorts vs regular) is handled by the uploader.
     """
     date_line = f"Post date: {date}" if date else ""
 
-    prompt = f"""You are managing an Arabic Christian YouTube channel.
+    prompt = f"""You are managing an Arabic YouTube channel featuring Islamic-Christian dialogue between معاذ عليان and محمود داود.
 
 Given the video information below, generate:
 1. A compelling Arabic YouTube title (max 80 characters, NO hashtags in the title)
-2. An Arabic YouTube description: 2-3 sentences summarising the video (NO hashtags)
-3. A list of 5–8 dynamic Arabic tags specific to this video's content
-4. A list of 1-2 Arabic hashtags (with # prefix) relevant to the specific content — do NOT include #مسيحي, #يسوع, or #الكنيسة as those are added automatically
+2. A "description_opener": 1-2 natural Arabic sentences for the opening lines of the description. Must mention "معاذ عليان" and "محمود داود" and the main topic. Example style: "حوار مثير بين معاذ عليان ومحمود داود حول [الموضوع]"
+3. A "description_summary": 2-3 natural Arabic sentences summarizing the specific content of this video
+4. A list of exactly 5 topic-specific Arabic keywords relevant to this video's content — do NOT include any of these already-fixed tags: معاذ عليان، محمود داود، moaz alian، mahmoud dawood، حوار إسلامي مسيحي، مقارنة أديان، الرد على الشبهات، حوارات مفتوحة، islamic christian debate، مناظرات دينية
+5. A list of 1-2 niche content-specific Arabic hashtags (with # prefix)
 
 Video filename: {filename}
 {date_line}
@@ -75,17 +98,18 @@ Video caption: {caption or "Not provided"}
 Respond ONLY with valid JSON — no markdown fences, no explanation:
 {{
   "title": "العنوان هنا",
-  "description": "وصف الفيديو هنا.",
-  "tags": ["وسم1", "وسم2"],
+  "description_opener": "السطر الأول والثاني هنا",
+  "description_summary": "ملخص الفيديو هنا",
+  "tags": ["وسم1", "وسم2", "وسم3", "وسم4", "وسم5"],
   "hashtags": ["#موضوع1", "#موضوع2"]
 }}
 
 Rules:
-- Everything must be in Arabic
-- Title must be clean — no hashtags, max 80 characters
-- Description must be 2-3 sentences only, no hashtags, no bullet points
-- Tags are plain keywords (no # prefix)
-- Hashtags field: only 1-2 niche content-specific hashtags with # prefix"""
+- Title: clean Arabic, no hashtags, max 80 characters
+- description_opener: naturally includes names معاذ عليان and محمود داود and the main topic
+- description_summary: 2-3 sentences specific to this video's content, no hashtags, no bullet points
+- tags: exactly 5 plain Arabic keywords (no # prefix), specific to this video's topic
+- hashtags: 1-2 niche content-specific hashtags with # prefix, do NOT include #مسيحي, #يسوع, or #الكنيسة"""
 
     try:
         response = _get_client().models.generate_content(
@@ -99,34 +123,43 @@ Rules:
 
         data = json.loads(raw)
 
+        # ── Title — DO NOT MODIFY THIS LOGIC ──────────────────────────────────
         title = str(data.get("title") or filename)
 
-        description = str(data.get("description") or "")
-        if description and not description.endswith(FOLLOW_LINE):
-            description = description.rstrip() + "\n" + FOLLOW_LINE
+        # ── Description — structured assembly ─────────────────────────────────
+        opener  = str(data.get("description_opener") or "").strip()
+        summary = str(data.get("description_summary") or "").strip()
+        description = (
+            opener + "\n"
+            + _IDENTITY_LINE + "\n\n"
+            + summary + "\n\n"
+            + _SEO_FOOTER
+        )
 
+        # ── Tags — P1 + 5 dynamic + P3, trimmed if joined length > 490 chars ──
         dynamic_tags: List[str] = data.get("tags") or []
         if not isinstance(dynamic_tags, list):
             dynamic_tags = []
         dynamic_tags = [t for t in dynamic_tags if isinstance(t, str)]
+        tags = _build_tags(dynamic_tags)
 
+        # ── Hashtags — unchanged logic ─────────────────────────────────────────
         dynamic_hashtags: List[str] = data.get("hashtags") or []
         if not isinstance(dynamic_hashtags, list):
             dynamic_hashtags = []
-        # ensure # prefix and strip any that duplicate fixed hashtags
         dynamic_hashtags = [
             h if h.startswith("#") else f"#{h}"
             for h in dynamic_hashtags
             if isinstance(h, str)
         ]
-
-        tags     = _merge_tags(dynamic_tags)
         hashtags = _merge_hashtags(dynamic_hashtags)
 
         log.info(
-            "Gemini — title: %s | tags: %d | hashtags: %s",
-            title, len(tags), " ".join(hashtags),
+            "Gemini — title: %s | tags (%d, %d chars): %s",
+            title, len(tags), len(", ".join(tags)), tags,
         )
+        log.info("Sample description:\n%s", description)
+
         return {
             "title":       title,
             "description": description,
@@ -140,9 +173,10 @@ Rules:
         log.error("Gemini API error: %s", exc)
 
     fallback_title = filename.rsplit(".", 1)[0].replace("_", " ")
+    fallback_description = _IDENTITY_LINE + "\n\n" + _SEO_FOOTER
     return {
         "title":       fallback_title,
-        "description": FOLLOW_LINE,
-        "tags":        list(config.YOUTUBE_FIXED_TAGS),
+        "description": fallback_description,
+        "tags":        list(_P1_TAGS + _P3_TAGS),
         "hashtags":    list(config.YOUTUBE_FIXED_HASHTAGS),
     }
