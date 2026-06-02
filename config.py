@@ -44,11 +44,9 @@ YOUTUBE_CLIENT_SECRETS = "credentials/youtube_client_secrets.json"
 YOUTUBE_TOKEN          = "credentials/youtube_token.json"
 YOUTUBE_CATEGORY_ID    = "22"    # People & Blogs
 YOUTUBE_PRIVACY        = "public"  # public | private | unlisted
-YOUTUBE_FIXED_TAGS: list[str] = [
-    "مسيحي", "يسوع", "مصر", "معاذ عليان", "محمود داود", "زين_خير_الله", "الكنيسة"
-]
+YOUTUBE_FIXED_TAGS: list[str] = []  # tags are now managed in claude_generator.py
 
-YOUTUBE_FIXED_HASHTAGS: list[str] = ["#مسيحي", "#يسوع", "#الكنيسة"]
+YOUTUBE_FIXED_HASHTAGS: list[str] = ["#معاذعليان", "#محمودداود", "#مقارنةالأديان"]
 
 # ── Scheduler ────────────────────────────────────────────────────────────────
 # All times are in Cairo time (Africa/Cairo, UTC+2) — audience timezone.
