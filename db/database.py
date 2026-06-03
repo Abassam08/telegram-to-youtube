@@ -35,6 +35,7 @@ def init_db() -> None:
                 youtube_hashtags    TEXT,       -- JSON array
                 status              TEXT    NOT NULL DEFAULT 'pending',
                 -- pending | downloading | downloaded | on_drive | uploading | uploaded | failed
+                retry_count         INTEGER DEFAULT 0,
                 download_date       TEXT,       -- YYYY-MM-DD
                 upload_date         TEXT,       -- YYYY-MM-DD
                 error_message       TEXT,
@@ -54,6 +55,7 @@ def init_db() -> None:
             ("youtube_description", "TEXT"),
             ("duration",            "INTEGER"),
             ("youtube_hashtags",    "TEXT"),
+            ("retry_count",         "INTEGER DEFAULT 0"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE videos ADD COLUMN {col} {typedef}")
@@ -133,3 +135,36 @@ def get_video(video_id: int) -> Optional[Dict[str, Any]]:
     with _conn() as conn:
         row = conn.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
     return dict(row) if row else None
+
+
+def reset_uploading_to_on_drive() -> List[int]:
+    """Move all videos stuck in 'uploading' back to 'on_drive'. Returns affected IDs."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id FROM videos WHERE status = 'uploading'"
+        ).fetchall()
+        ids = [r[0] for r in rows]
+        if ids:
+            conn.execute(
+                "UPDATE videos SET status = 'on_drive' WHERE status = 'uploading'"
+            )
+    return ids
+
+
+def count_uploads_last_24h() -> int:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM videos WHERE status = 'uploaded' "
+            "AND updated_at >= datetime('now', '-24 hours')"
+        ).fetchone()
+    return row[0]
+
+
+def count_stuck_uploading() -> int:
+    """Videos in 'uploading' status for more than 1 hour."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM videos WHERE status = 'uploading' "
+            "AND updated_at < datetime('now', '-1 hour')"
+        ).fetchone()
+    return row[0]

@@ -1,6 +1,7 @@
 import os
 from typing import List, Optional
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -15,6 +16,30 @@ log = get_logger(__name__)
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 
+class YouTubeTokenExpiredError(Exception):
+    pass
+
+
+def _handle_token_expired() -> None:
+    import db.database as database
+    from utils.email_alert import send_alert
+
+    reset_ids = database.reset_uploading_to_on_drive()
+    if reset_ids:
+        log.info("Reset %d video(s) from uploading → on_drive: %s", len(reset_ids), reset_ids)
+
+    log.critical(
+        "YOUTUBE TOKEN EXPIRED — run auth_youtube.py on your laptop to renew the token"
+    )
+    send_alert(
+        "ALERT: YouTube Token Expired",
+        "The YouTube OAuth token has expired (invalid_grant).\n\n"
+        "Action required: run auth_youtube.py on your laptop, then copy the new\n"
+        f"token file to the server at: {config.YOUTUBE_TOKEN}\n\n"
+        "Affected videos have been reset to on_drive status and will retry automatically.",
+    )
+
+
 def _get_service():
     token_file = config.YOUTUBE_TOKEN
     creds = None
@@ -24,7 +49,13 @@ def _get_service():
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except RefreshError as exc:
+                if "invalid_grant" in str(exc):
+                    _handle_token_expired()
+                    raise YouTubeTokenExpiredError("YouTube token expired") from exc
+                raise
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
                 config.YOUTUBE_CLIENT_SECRETS, SCOPES

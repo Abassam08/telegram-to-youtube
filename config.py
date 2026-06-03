@@ -50,6 +50,10 @@ YOUTUBE_FIXED_TAGS: list[str] = [
 
 YOUTUBE_FIXED_HASHTAGS: list[str] = ["#مسيحي", "#يسوع", "#الكنيسة"]
 
+# ── Alerts ───────────────────────────────────────────────────────────────────
+ALERT_EMAIL       = os.getenv("ALERT_EMAIL", "")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
+
 # ── Scheduler ────────────────────────────────────────────────────────────────
 # All times are in Cairo time (Africa/Cairo, UTC+2) — audience timezone.
 SCHEDULER_TIMEZONE = "Africa/Cairo"

@@ -8,6 +8,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 import config
 import db.database as database
 from services import claude_generator, drive_manager, telegram_downloader, youtube_uploader
+from services.youtube_uploader import YouTubeTokenExpiredError
 from utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -112,9 +113,37 @@ def upload_job() -> None:
             os.remove(local_path)
             log.info("Video %d uploaded and local file removed", video["id"])
 
+    except YouTubeTokenExpiredError:
+        # youtube_uploader already logged, sent email, and reset statuses
+        log.error("YouTube token expired — upload job aborted, waiting for token renewal")
+
     except Exception as exc:
         log.error("Upload failed for video %d: %s", video["id"], exc)
-        database.update_video(video["id"], status="on_drive", error_message=str(exc))
+
+        current      = database.get_video(video["id"])
+        retry_count  = (current.get("retry_count") or 0) + 1
+
+        if retry_count >= 3:
+            log.warning(
+                "Video %d failed %d times — marking as failed", video["id"], retry_count
+            )
+            database.update_video(
+                video["id"],
+                status="failed",
+                retry_count=retry_count,
+                error_message=str(exc),
+            )
+        else:
+            log.info(
+                "Video %d failed (attempt %d/3) — will retry", video["id"], retry_count
+            )
+            database.update_video(
+                video["id"],
+                status="on_drive",
+                retry_count=retry_count,
+                error_message=str(exc),
+            )
+
         # if we fetched from Drive, delete the local temp copy we created
         if drive_file_id:
             local_path = os.path.join(config.TEMP_DOWNLOAD_DIR, video["original_filename"])

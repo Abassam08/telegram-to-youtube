@@ -71,6 +71,18 @@ else
     echo "WARNING: Service status is '${STATUS}' — check logs below."
 fi
 
+# ── Cron job for health_check.py (every 6 hours) ──────────────────────────────
+HEALTH_CMD="${PYTHON_BIN} ${SCRIPT_DIR}/health_check.py >> ${SCRIPT_DIR}/data/health_check.log 2>&1"
+CRON_ENTRY="0 */6 * * * ${HEALTH_CMD}"
+
+# Add only if not already present
+if crontab -l 2>/dev/null | grep -qF "health_check.py"; then
+    echo "Health check cron already installed — skipping."
+else
+    ( crontab -l 2>/dev/null; echo "${CRON_ENTRY}" ) | crontab -
+    echo "Health check cron installed (runs every 6 hours)."
+fi
+
 echo ""
 echo "Useful commands:"
 echo "  sudo systemctl status ${SERVICE_NAME}        # current status"
@@ -78,3 +90,4 @@ echo "  sudo journalctl -u ${SERVICE_NAME} -f        # live log tail"
 echo "  sudo systemctl stop ${SERVICE_NAME}          # stop"
 echo "  sudo systemctl restart ${SERVICE_NAME}       # restart"
 echo "  sudo systemctl disable ${SERVICE_NAME}       # remove from autostart"
+echo "  crontab -l                                   # view scheduled jobs"
