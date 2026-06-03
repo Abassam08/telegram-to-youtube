@@ -42,6 +42,7 @@ GEMINI_MODEL   = "gemini-flash-lite-latest"
 # ── YouTube ───────────────────────────────────────────────────────────────────
 YOUTUBE_CLIENT_SECRETS = "credentials/youtube_client_secrets.json"
 YOUTUBE_TOKEN          = "credentials/youtube_token.json"
+YOUTUBE_ACCOUNT        = "ahmedbcan@gmail.com"
 YOUTUBE_CATEGORY_ID    = "22"    # People & Blogs
 YOUTUBE_PRIVACY        = "public"  # public | private | unlisted
 YOUTUBE_FIXED_TAGS: list[str] = [
