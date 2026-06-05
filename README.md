@@ -24,7 +24,7 @@ Automated pipeline that monitors a Telegram channel, downloads new videos, gener
 
 ### What it does
 
-This project automates the full lifecycle of reposting Arabic Christian video content from a private Telegram channel to a public YouTube channel:
+This project automates the full lifecycle of reposting Arabic video content from a private Telegram channel to a public YouTube channel:
 
 1. **Downloads** up to 10 videos per day from a Telegram channel using the Telethon library, saving them to `data/temp/`
 2. **Generates** an Arabic YouTube title, description, tags, and hashtags using the Google Gemini API — based on the video's original Telegram caption — in the same step as the download
