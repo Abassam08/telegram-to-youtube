@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(python3 -c \"import PIL; print\\('PIL', PIL.__version__\\)\")",
+      "Bash(python3 -c \"import cv2; print\\('cv2', cv2.__version__\\)\")",
+      "Bash(python3 -c \"import numpy; print\\('numpy', numpy.__version__\\)\")",
+      "Bash(python3 -c \"import arabic_reshaper\")",
+      "Bash(python3 -c \"import bidi\")",
+      "Bash(find / -iname \"*amiri*\")",
+      "Bash(find / -iname \"*.ttf\" -o -iname \"*.ttc\")",
+      "Bash(fc-list)",
+      "Bash(pip3 install *)",
+      "Bash(apt list *)",
+      "Bash(python3 -)",
+      "Read(//tmp/**)"
+    ]
+  }
+}
