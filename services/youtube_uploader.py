@@ -122,3 +122,18 @@ def upload_video(
     video_id = response["id"]
     log.info("Uploaded to YouTube: https://youtu.be/%s  title=%s", video_id, title)
     return video_id
+
+
+def set_thumbnail(youtube_video_id: str, thumbnail_path: str) -> None:
+    """Set a custom thumbnail for an uploaded video.
+
+    Uses the YouTube Data API v3 thumbnails.set() endpoint, which costs
+    50 quota units per call.
+    """
+    service = _get_service()
+    media = MediaFileUpload(thumbnail_path)
+    service.thumbnails().set(videoId=youtube_video_id, media_body=media).execute()
+    log.info(
+        "Set custom thumbnail for video %s (thumbnails.set — 50 quota units used)",
+        youtube_video_id,
+    )

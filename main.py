@@ -7,7 +7,13 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 import config
 import db.database as database
-from services import claude_generator, drive_manager, telegram_downloader, youtube_uploader
+from services import (
+    claude_generator,
+    drive_manager,
+    telegram_downloader,
+    thumbnail_generator,
+    youtube_uploader,
+)
 from services.youtube_uploader import YouTubeTokenExpiredError
 from utils.logger import get_logger
 
@@ -105,6 +111,20 @@ def upload_job() -> None:
             status="uploaded",
             upload_date=date.today().isoformat(),
         )
+
+        # Thumbnails are only generated for long-form videos (Shorts are skipped)
+        duration = video.get("duration") or 0
+        if duration > 60:
+            try:
+                thumbnail_path = thumbnail_generator.generate(
+                    local_path, video["youtube_title"], video["id"]
+                )
+                youtube_uploader.set_thumbnail(video_id, thumbnail_path)
+            except Exception as exc:
+                log.error(
+                    "Thumbnail generation/upload failed for video %d: %s",
+                    video["id"], exc,
+                )
 
         if drive_file_id:
             drive_manager.delete_file(drive_file_id, video["drive_account"])
