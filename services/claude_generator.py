@@ -41,6 +41,25 @@ _P3_TAGS = [
 ]
 
 
+def _extract_title_from_caption(caption: Optional[str]) -> str:
+    """Use the Telegram caption directly as the YouTube title.
+
+    Strips whitespace and truncates to the last full word before
+    100 characters (appending "...") if the caption is too long.
+    Returns "" if the caption is empty/None.
+    """
+    if not caption:
+        return ""
+    title = caption.strip()
+    if len(title) > 100:
+        truncated = title[:100]
+        last_space = truncated.rfind(" ")
+        if last_space > 0:
+            truncated = truncated[:last_space]
+        title = truncated.rstrip() + "..."
+    return title
+
+
 def _merge_hashtags(dynamic: List[str]) -> List[str]:
     """Fixed hashtags first, then 1-2 dynamic ones — deduplicated, order preserved."""
     seen: dict[str, None] = {}
@@ -82,14 +101,43 @@ def generate_metadata(
     """
     date_line = f"Post date: {date}" if date else ""
 
+    # Title comes from the original Telegram caption when available — Gemini
+    # is only asked to generate one as a fallback for empty/None captions.
+    caption_title = _extract_title_from_caption(caption)
+    need_gemini_title = not caption_title
+
+    tasks = []
+    if need_gemini_title:
+        tasks.append(
+            'A compelling Arabic YouTube title (max 80 characters, NO hashtags in the title)'
+        )
+    tasks.append(
+        'A "description_opener": 1-2 natural Arabic sentences for the opening lines of the '
+        'description. Must mention "معاذ عليان" and "محمود داود" and the main topic. '
+        'Example style: "حوار مثير بين معاذ عليان ومحمود داود حول [الموضوع]"'
+    )
+    tasks.append(
+        'A "description_summary": 2-3 natural Arabic sentences summarizing the specific content of this video'
+    )
+    tasks.append(
+        "A list of exactly 5 topic-specific Arabic keywords relevant to this video's content — "
+        "do NOT include any of these already-fixed tags: معاذ عليان، محمود داود، moaz alian، "
+        "mahmoud dawood، حوار إسلامي مسيحي، مقارنة أديان، الرد على الشبهات، حوارات مفتوحة، "
+        "islamic christian debate، مناظرات دينية"
+    )
+    tasks.append('A list of 1-2 niche content-specific Arabic hashtags (with # prefix)')
+
+    tasks_text = "\n".join(f"{i + 1}. {task}" for i, task in enumerate(tasks))
+
+    title_field = '  "title": "العنوان هنا",\n' if need_gemini_title else ""
+    title_rule = (
+        "\n- Title: clean Arabic, no hashtags, max 80 characters" if need_gemini_title else ""
+    )
+
     prompt = f"""You are managing an Arabic YouTube channel featuring Islamic-Christian dialogue between معاذ عليان and محمود داود.
 
 Given the video information below, generate:
-1. A compelling Arabic YouTube title (max 80 characters, NO hashtags in the title)
-2. A "description_opener": 1-2 natural Arabic sentences for the opening lines of the description. Must mention "معاذ عليان" and "محمود داود" and the main topic. Example style: "حوار مثير بين معاذ عليان ومحمود داود حول [الموضوع]"
-3. A "description_summary": 2-3 natural Arabic sentences summarizing the specific content of this video
-4. A list of exactly 5 topic-specific Arabic keywords relevant to this video's content — do NOT include any of these already-fixed tags: معاذ عليان، محمود داود، moaz alian، mahmoud dawood، حوار إسلامي مسيحي، مقارنة أديان، الرد على الشبهات، حوارات مفتوحة، islamic christian debate، مناظرات دينية
-5. A list of 1-2 niche content-specific Arabic hashtags (with # prefix)
+{tasks_text}
 
 Video filename: {filename}
 {date_line}
@@ -97,15 +145,13 @@ Video caption: {caption or "Not provided"}
 
 Respond ONLY with valid JSON — no markdown fences, no explanation:
 {{
-  "title": "العنوان هنا",
-  "description_opener": "السطر الأول والثاني هنا",
+{title_field}  "description_opener": "السطر الأول والثاني هنا",
   "description_summary": "ملخص الفيديو هنا",
   "tags": ["وسم1", "وسم2", "وسم3", "وسم4", "وسم5"],
   "hashtags": ["#موضوع1", "#موضوع2"]
 }}
 
-Rules:
-- Title: clean Arabic, no hashtags, max 80 characters
+Rules:{title_rule}
 - description_opener: naturally includes names معاذ عليان and محمود داود and the main topic
 - description_summary: 2-3 sentences specific to this video's content, no hashtags, no bullet points
 - tags: exactly 5 plain Arabic keywords (no # prefix), specific to this video's topic
@@ -124,7 +170,8 @@ Rules:
         data = json.loads(raw)
 
         # ── Title — DO NOT MODIFY THIS LOGIC ──────────────────────────────────
-        title = str(data.get("title") or filename)
+        # Title comes from original Telegram caption, not Gemini
+        title = caption_title or str(data.get("title") or filename)
 
         # ── Description — structured assembly ─────────────────────────────────
         opener  = str(data.get("description_opener") or "").strip()
@@ -172,7 +219,7 @@ Rules:
     except Exception as exc:
         log.error("Gemini API error: %s", exc)
 
-    fallback_title = filename.rsplit(".", 1)[0].replace("_", " ")
+    fallback_title = caption_title or filename.rsplit(".", 1)[0].replace("_", " ")
     fallback_description = _IDENTITY_LINE + "\n\n" + _SEO_FOOTER
     return {
         "title":       fallback_title,
