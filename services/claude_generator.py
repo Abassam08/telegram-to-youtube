@@ -113,8 +113,7 @@ def generate_metadata(
         )
     tasks.append(
         'A "description_opener": 1-2 natural Arabic sentences for the opening lines of the '
-        'description. Must mention "معاذ عليان" and "محمود داود" and the main topic. '
-        'Example style: "حوار مثير بين معاذ عليان ومحمود داود حول [الموضوع]"'
+        'description, summarizing the main topic of the video'
     )
     tasks.append(
         'A "description_summary": 2-3 natural Arabic sentences summarizing the specific content of this video'
@@ -131,7 +130,7 @@ def generate_metadata(
 
     title_field = '  "title": "العنوان هنا",\n' if need_gemini_title else ""
     title_rule = (
-        "\n- Title: clean Arabic, no hashtags, max 80 characters" if need_gemini_title else ""
+        "\n- Title (fallback only): clean Arabic, no hashtags, max 80 characters" if need_gemini_title else ""
     )
 
     prompt = f"""You are managing an Arabic YouTube channel featuring Islamic-Christian dialogue between معاذ عليان and محمود داود.
@@ -152,7 +151,7 @@ Respond ONLY with valid JSON — no markdown fences, no explanation:
 }}
 
 Rules:{title_rule}
-- description_opener: naturally includes names معاذ عليان and محمود داود and the main topic
+- description_opener: naturally summarizes the video's main topic, no bullet points
 - description_summary: 2-3 sentences specific to this video's content, no hashtags, no bullet points
 - tags: exactly 5 plain Arabic keywords (no # prefix), specific to this video's topic
 - hashtags: 1-2 niche content-specific hashtags with # prefix, do NOT include #مسيحي, #يسوع, or #الكنيسة"""
