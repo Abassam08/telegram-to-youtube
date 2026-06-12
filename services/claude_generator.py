@@ -112,11 +112,12 @@ def generate_metadata(
             'A compelling Arabic YouTube title (max 80 characters, NO hashtags in the title)'
         )
     tasks.append(
-        'A "description_opener": 1-2 natural Arabic sentences for the opening lines of the '
-        'description, summarizing the main topic of the video'
+        'A "description_opener": A 1-2 sentence natural Arabic summary of the video topic. '
+        'Do NOT mention any person\'s name. Focus only on the subject matter being discussed.'
     )
     tasks.append(
-        'A "description_summary": 2-3 natural Arabic sentences summarizing the specific content of this video'
+        'A "description_summary": 2-3 natural Arabic sentences describing the topic, arguments, '
+        'and content of this video. Do NOT mention any person\'s name.'
     )
     tasks.append(
         "A list of exactly 5 topic-specific Arabic keywords relevant to this video's content — "
@@ -151,10 +152,10 @@ Respond ONLY with valid JSON — no markdown fences, no explanation:
 }}
 
 Rules:{title_rule}
-- description_opener: naturally summarizes the video's main topic, no bullet points
-- description_summary: 2-3 sentences specific to this video's content, no hashtags, no bullet points
+- description_opener: 1-2 sentences about the video topic only, NO person names
+- description_summary: 2-3 sentences specific to this video's content, no hashtags, no bullet points, NO person names
 - tags: exactly 5 plain Arabic keywords (no # prefix), specific to this video's topic
-- hashtags: 1-2 niche content-specific hashtags with # prefix, do NOT include #مسيحي, #يسوع, or #الكنيسة"""
+- hashtags: 1-2 niche content-specific hashtags with # prefix"""
 
     try:
         response = _get_client().models.generate_content(
@@ -189,7 +190,11 @@ Rules:{title_rule}
         dynamic_tags = [t for t in dynamic_tags if isinstance(t, str)]
         tags = _build_tags(dynamic_tags)
 
-        # ── Hashtags — unchanged logic ─────────────────────────────────────────
+        # ── Hashtags ───────────────────────────────────────────────────────────
+        _BLOCKED_HASHTAGS = {
+            "#مسيحي", "#يسوع", "#الكنيسة", "#المسيح",
+            "#jesus", "#christian", "#church",
+        }
         dynamic_hashtags: List[str] = data.get("hashtags") or []
         if not isinstance(dynamic_hashtags, list):
             dynamic_hashtags = []
@@ -198,6 +203,7 @@ Rules:{title_rule}
             for h in dynamic_hashtags
             if isinstance(h, str)
         ]
+        dynamic_hashtags = [h for h in dynamic_hashtags if h.lower() not in {b.lower() for b in _BLOCKED_HASHTAGS}]
         hashtags = _merge_hashtags(dynamic_hashtags)
 
         log.info(
