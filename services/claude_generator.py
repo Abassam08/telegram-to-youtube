@@ -191,10 +191,6 @@ Rules:{title_rule}
         tags = _build_tags(dynamic_tags)
 
         # ── Hashtags ───────────────────────────────────────────────────────────
-        _BLOCKED_HASHTAGS = {
-            "#مسيحي", "#يسوع", "#الكنيسة", "#المسيح",
-            "#jesus", "#christian", "#church",
-        }
         dynamic_hashtags: List[str] = data.get("hashtags") or []
         if not isinstance(dynamic_hashtags, list):
             dynamic_hashtags = []
@@ -203,7 +199,6 @@ Rules:{title_rule}
             for h in dynamic_hashtags
             if isinstance(h, str)
         ]
-        dynamic_hashtags = [h for h in dynamic_hashtags if h.lower() not in {b.lower() for b in _BLOCKED_HASHTAGS}]
         hashtags = _merge_hashtags(dynamic_hashtags)
 
         log.info(
