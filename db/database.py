@@ -56,6 +56,7 @@ def init_db() -> None:
             ("duration",            "INTEGER"),
             ("youtube_hashtags",    "TEXT"),
             ("retry_count",         "INTEGER DEFAULT 0"),
+            ("thumbnail_path",      "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE videos ADD COLUMN {col} {typedef}")

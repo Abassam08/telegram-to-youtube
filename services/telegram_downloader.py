@@ -16,10 +16,14 @@ from utils.logger import get_logger
 log = get_logger(__name__)
 
 
+_THUMBNAIL_DIR = "data/thumbnails"
+
+
 async def _download_videos(
     client: TelegramClient, remaining: int
 ) -> List[Dict]:
     os.makedirs(config.TEMP_DOWNLOAD_DIR, exist_ok=True)
+    os.makedirs(_THUMBNAIL_DIR, exist_ok=True)
     downloaded: List[Dict] = []
 
     async for message in client.iter_messages(config.TELEGRAM_CHANNEL, limit=200):
@@ -56,15 +60,36 @@ async def _download_videos(
         log.info("Downloading message %s → %s", message.id, local_path)
         try:
             await client.download_media(message, file=local_path)
-            db.update_video(video_id, local_path=local_path, status="downloaded")
+
+            # Download thumbnail if the video document has one
+            thumbnail_path = None
+            thumbs = getattr(doc, "thumbs", None)
+            if thumbs:
+                thumb_dest = os.path.join(_THUMBNAIL_DIR, f"{video_id}.jpg")
+                try:
+                    await client.download_media(
+                        message.media.document.thumbs[-1], file=thumb_dest
+                    )
+                    thumbnail_path = thumb_dest
+                    log.info("Thumbnail saved for video %d → %s", video_id, thumb_dest)
+                except Exception as exc:
+                    log.warning("Thumbnail download failed for video %d: %s", video_id, exc)
+
+            db.update_video(
+                video_id,
+                local_path=local_path,
+                status="downloaded",
+                thumbnail_path=thumbnail_path,
+            )
             downloaded.append(
                 {
-                    "db_id":    video_id,
-                    "filename": filename,
-                    "caption":  caption,
-                    "date":     post_date,
-                    "duration": duration,
-                    "path":     local_path,
+                    "db_id":          video_id,
+                    "filename":       filename,
+                    "caption":        caption,
+                    "date":           post_date,
+                    "duration":       duration,
+                    "path":           local_path,
+                    "thumbnail_path": thumbnail_path,
                 }
             )
             remaining -= 1

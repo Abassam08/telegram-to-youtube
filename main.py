@@ -112,17 +112,29 @@ def upload_job() -> None:
             upload_date=date.today().isoformat(),
         )
 
-        # Thumbnails are only generated for long-form videos (Shorts are skipped)
-        duration = video.get("duration") or 0
-        if duration > 60:
+        # Thumbnail: prefer the one downloaded from Telegram; fall back to
+        # generator for long-form videos only; skip entirely for Shorts.
+        duration       = video.get("duration") or 0
+        tg_thumb       = video.get("thumbnail_path") or ""
+        thumbnail_path = None
+        if tg_thumb and os.path.exists(tg_thumb):
+            thumbnail_path = tg_thumb
+        elif duration > 60:
             try:
                 thumbnail_path = thumbnail_generator.generate(
                     local_path, video["youtube_title"], video["id"]
                 )
+            except Exception as exc:
+                log.error(
+                    "Thumbnail generation failed for video %d: %s",
+                    video["id"], exc,
+                )
+        if thumbnail_path:
+            try:
                 youtube_uploader.set_thumbnail(video_id, thumbnail_path)
             except Exception as exc:
                 log.error(
-                    "Thumbnail generation/upload failed for video %d: %s",
+                    "Thumbnail upload failed for video %d: %s",
                     video["id"], exc,
                 )
 
