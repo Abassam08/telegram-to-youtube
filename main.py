@@ -11,7 +11,6 @@ from services import (
     claude_generator,
     drive_manager,
     telegram_downloader,
-    thumbnail_generator,
     youtube_uploader,
 )
 from services.youtube_uploader import YouTubeTokenExpiredError
@@ -124,24 +123,9 @@ def upload_job() -> None:
             upload_date=date.today().isoformat(),
         )
 
-        # Thumbnail: prefer the one downloaded from Telegram; fall back to
-        # generator for long-form videos only; skip entirely for Shorts.
-        duration       = video.get("duration") or 0
-        tg_thumb       = video.get("thumbnail_path") or ""
-        thumbnail_path = None
-        if tg_thumb and os.path.exists(tg_thumb):
-            thumbnail_path = tg_thumb
-        elif duration > 60:
-            try:
-                thumbnail_path = thumbnail_generator.generate(
-                    local_path, video["youtube_title"], video["id"]
-                )
-            except Exception as exc:
-                log.error(
-                    "Thumbnail generation failed for video %d: %s",
-                    video["id"], exc,
-                )
-        if thumbnail_path:
+        # Thumbnail: use the one downloaded from Telegram, if present.
+        thumbnail_path = video.get("thumbnail_path") or ""
+        if thumbnail_path and os.path.exists(thumbnail_path):
             try:
                 youtube_uploader.set_thumbnail(video_id, thumbnail_path)
             except Exception as exc:
