@@ -94,6 +94,18 @@ def upload_job() -> None:
                 config.TEMP_DOWNLOAD_DIR, video["original_filename"]
             )
             if not os.path.exists(local_path):
+                if video["local_path"]:
+                    log.warning(
+                        "Video %d local file missing: %s — resetting to pending for re-download",
+                        video["id"], local_path,
+                    )
+                    database.update_video(
+                        video["id"],
+                        status="pending",
+                        local_path=None,
+                        retry_count=0,
+                    )
+                    return
                 raise FileNotFoundError(f"Local file not found: {local_path}")
             log.info("Uploading directly from local file: %s", local_path)
 
