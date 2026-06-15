@@ -13,6 +13,7 @@ from services import (
     telegram_downloader,
     youtube_uploader,
 )
+import utils.video_processor as video_processor
 from services.youtube_uploader import YouTubeTokenExpiredError
 from utils.logger import get_logger
 
@@ -38,6 +39,10 @@ def download_job() -> None:
             metadata = claude_generator.generate_metadata(
                 video["caption"], video["filename"], video.get("date")
             )
+
+            # 1.5. Apply CTA overlay to the downloaded video
+            if video.get("path"):
+                video_processor.add_cta_overlay(video["path"], cta_text="اشترك للمزيد")
 
             # 2. Mark ready for YouTube upload — file stays in data/temp/
             database.update_video(
