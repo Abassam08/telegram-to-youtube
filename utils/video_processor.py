@@ -12,15 +12,15 @@ from utils.logger import get_logger
 
 log = get_logger(__name__)
 
-FONT_URL = "https://raw.githubusercontent.com/googlefonts/tajawal/main/fonts/ttf/Tajawal-Bold.ttf"
+FONT_URL = "https://raw.githubusercontent.com/Gue3bara/Cairo/master/fonts/ttf/Cairo-Bold.ttf"
 FONT_DIR = "data/fonts"
-FONT_PATH = os.path.join(FONT_DIR, "Tajawal-Bold.ttf")
+FONT_PATH = os.path.join(FONT_DIR, "Cairo-Bold.ttf")
 
 
 def _ensure_font_exists() -> None:
     if not os.path.exists(FONT_PATH):
         os.makedirs(FONT_DIR, exist_ok=True)
-        log.info("Downloading Tajawal font for CTA overlay...")
+        log.info("Downloading Cairo font for CTA overlay...")
         try:
             urllib.request.urlretrieve(FONT_URL, FONT_PATH)
             log.info("Font downloaded successfully to %s", FONT_PATH)
@@ -50,7 +50,7 @@ def _create_cta_image(text: str, output_path: str) -> None:
     bidi_text = get_display(reshaped_text)
 
     try:
-        font = ImageFont.truetype(FONT_PATH, 70)
+        font = ImageFont.truetype(FONT_PATH, 40)  # Smaller font size
     except IOError:
         log.error("Could not load font from %s, falling back to default.", FONT_PATH)
         font = ImageFont.load_default()
@@ -86,6 +86,19 @@ def _create_cta_image(text: str, output_path: str) -> None:
     img.save(output_path)
 
 
+def _get_video_duration(video_path: str) -> float:
+    try:
+        cmd = [
+            "ffprobe", "-v", "error", "-show_entries",
+            "format=duration", "-of",
+            "default=noprint_wrappers=1:nokey=1", video_path
+        ]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        return float(result.stdout.strip())
+    except Exception as exc:
+        log.error("Failed to get video duration: %s", exc)
+        return 0.0
+
 def add_cta_overlay(video_path: str, cta_text: str = "اشترك للمزيد") -> str:
     """
     Overlays a CTA on the video if ffmpeg is available.
@@ -104,13 +117,18 @@ def add_cta_overlay(video_path: str, cta_text: str = "اشترك للمزيد") 
     try:
         _create_cta_image(cta_text, png_path)
 
-        # ffmpeg command to overlay the image at bottom center (150px from bottom)
-        # We re-encode video with libx264, veryfast preset to save CPU on the VM
+        duration = _get_video_duration(video_path)
+        start_time = duration * 0.7 if duration > 0 else 0
+
+        # ffmpeg command to overlay the image at top right corner (W-w-30, 30)
+        # and only show it for the last 30% of the video
+        overlay_filter = f"[0:v][1:v]overlay=W-w-30:30:enable='between(t,{start_time},{duration})'"
+
         cmd = [
             "ffmpeg", "-y",
             "-i", video_path,
             "-i", png_path,
-            "-filter_complex", "[0:v][1:v]overlay=(main_w-overlay_w)/2:main_h-overlay_h-150",
+            "-filter_complex", overlay_filter,
             "-c:a", "copy",
             "-c:v", "libx264",
             "-preset", "veryfast",
