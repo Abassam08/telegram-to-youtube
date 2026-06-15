@@ -12,15 +12,15 @@ from utils.logger import get_logger
 
 log = get_logger(__name__)
 
-FONT_URL = "https://raw.githubusercontent.com/Gue3bara/Cairo/master/fonts/ttf/Cairo-Bold.ttf"
+FONT_URL = "https://github.com/google/fonts/raw/main/ofl/amiri/Amiri-Bold.ttf"
 FONT_DIR = "data/fonts"
-FONT_PATH = os.path.join(FONT_DIR, "Cairo-Bold.ttf")
+FONT_PATH = os.path.join(FONT_DIR, "Amiri-Bold.ttf")
 
 
 def _ensure_font_exists() -> None:
     if not os.path.exists(FONT_PATH):
         os.makedirs(FONT_DIR, exist_ok=True)
-        log.info("Downloading Cairo font for CTA overlay...")
+        log.info("Downloading Amiri font for CTA overlay...")
         try:
             urllib.request.urlretrieve(FONT_URL, FONT_PATH)
             log.info("Font downloaded successfully to %s", FONT_PATH)
