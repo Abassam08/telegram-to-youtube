@@ -10,8 +10,8 @@ TELEGRAM_CHANNEL  = os.getenv("TELEGRAM_CHANNEL", "")  # e.g. "@channelname" or 
 TELEGRAM_SESSION  = "data/telegram_session"
 
 # ── Daily limits ──────────────────────────────────────────────────────────────
-MAX_DOWNLOADS_PER_DAY = 10
-MAX_UPLOADS_PER_DAY   = 6
+MAX_DOWNLOADS_PER_DAY = 20  # Keep a buffer of videos
+MAX_UPLOADS_PER_DAY   = 15
 
 # ── Local temp storage ────────────────────────────────────────────────────────
 TEMP_DOWNLOAD_DIR = "data/temp"
@@ -59,4 +59,8 @@ GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 # All times are in Cairo time (Africa/Cairo, UTC+2) — audience timezone.
 SCHEDULER_TIMEZONE = "Africa/Cairo"
 DOWNLOAD_HOUR = 3                           # 03:00 Cairo
-UPLOAD_TIMES  = ["04:00", "07:00", "13:00", "14:00", "16:00", "21:00"]  # HH:MM, one upload per slot
+UPLOAD_TIMES  = [
+    "08:00", "10:00", "12:00", "13:00", "14:00", 
+    "15:00", "16:00", "17:00", "18:00", "19:00", 
+    "20:00", "21:00", "22:00", "23:00", "00:00"
+]  # Optimized for Egyptian peak hours (mostly afternoon and evening)
