@@ -1,0 +1,1 @@
+python3 -c "import sys; sys.path.insert(0, .); import config; config.MAX_UPLOADS_PER_DAY = 10; import main; main.upload_job()"
