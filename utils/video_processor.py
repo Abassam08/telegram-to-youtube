@@ -120,9 +120,9 @@ def add_cta_overlay(video_path: str, cta_text: str = "اشترك للمزيد") 
         duration = _get_video_duration(video_path)
         start_time = duration * 0.7 if duration > 0 else 0
 
-        # ffmpeg command to overlay the image at top right corner (W-w-30, 30)
-        # and only show it for the last 30% of the video
-        overlay_filter = f"[0:v][1:v]overlay=W-w-30:30:enable='between(t,{start_time},{duration})'"
+        # ffmpeg command to overlay the image at top left corner (30, 30)
+        # and only show it for the last 30% of the video (or always if duration couldn't be detected)
+        overlay_filter = f"[0:v][1:v]overlay=30:30:enable='gte(t,{start_time})'"
 
         cmd = [
             "ffmpeg", "-y",
