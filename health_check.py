@@ -40,7 +40,7 @@ def check_youtube_token() -> tuple[bool, str]:
             return False, "YouTube token file missing"
 
         creds = Credentials.from_authorized_user_file(
-            token_file, ["https://www.googleapis.com/auth/youtube.upload"]
+            token_file, ["https://www.googleapis.com/auth/youtube"]
         )
         if creds.valid:
             return True, "OK"

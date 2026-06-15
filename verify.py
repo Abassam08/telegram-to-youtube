@@ -63,7 +63,7 @@ def check_youtube():
 
     creds = Credentials.from_authorized_user_file(
         config.YOUTUBE_TOKEN,
-        ["https://www.googleapis.com/auth/youtube.upload"],
+        ["https://www.googleapis.com/auth/youtube"],
     )
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())

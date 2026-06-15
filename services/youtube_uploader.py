@@ -13,7 +13,7 @@ from utils.logger import get_logger
 
 log = get_logger(__name__)
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+SCOPES = ["https://www.googleapis.com/auth/youtube"]
 
 
 class YouTubeTokenExpiredError(Exception):
