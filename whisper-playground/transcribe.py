@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""CLI for transcribing or translating audio/video files with OpenAI Whisper."""
+"""CLI for transcribing or translating audio/video files with OpenAI Whisper,
+then suggesting SEO-optimized YouTube metadata from the transcript."""
 import argparse
 import os
 import sys
 
 import whisper
 from whisper.utils import get_writer
+
+from metadata import format_metadata, generate_seo_metadata
 
 
 def main() -> None:
@@ -32,12 +35,17 @@ def main() -> None:
         "--output-dir", default="output",
         help="Directory to write results to (default: output/)",
     )
+    parser.add_argument(
+        "--skip-metadata", action="store_true",
+        help="Skip generating SEO metadata suggestions (transcript only)",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
         sys.exit(f"Input file not found: {args.input}")
 
     os.makedirs(args.output_dir, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(args.input))[0]
 
     print(f"Loading Whisper model '{args.model}'...")
     model = whisper.load_model(args.model)
@@ -45,12 +53,33 @@ def main() -> None:
     print(f"Running {args.task} on {args.input}...")
     result = model.transcribe(args.input, language=args.language, task=args.task, verbose=False)
 
+    transcript = result["text"].strip()
     print("\n--- Detected text ---")
-    print(result["text"].strip())
+    print(transcript)
 
+    # whisper's writers name output files after the input's basename, so each
+    # source file gets its own <stem>.<format> instead of overwriting a shared name.
     writer = get_writer(args.format, args.output_dir)
     writer(result, args.input)
-    print(f"\nSaved {args.format} output to {args.output_dir}/")
+    print(f"\nSaved {args.format} output to {args.output_dir}/{stem}.{args.format}")
+
+    if args.skip_metadata:
+        return
+
+    print("\nGenerating SEO metadata suggestions...")
+    try:
+        metadata = generate_seo_metadata(transcript)
+    except Exception as exc:
+        print(f"\nMetadata generation failed: {exc}")
+        return
+
+    metadata_text = format_metadata(metadata)
+    print(f"\n{metadata_text}")
+
+    metadata_path = os.path.join(args.output_dir, f"{stem}.metadata.txt")
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        f.write(metadata_text + "\n")
+    print(f"\nSaved metadata suggestions to {metadata_path}")
 
 
 if __name__ == "__main__":
