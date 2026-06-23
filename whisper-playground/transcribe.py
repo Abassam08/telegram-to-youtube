@@ -8,8 +8,6 @@ import sys
 import whisper
 from whisper.utils import get_writer
 
-from metadata import format_metadata, generate_seo_metadata
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Transcribe or translate audio/video with Whisper")
@@ -68,6 +66,7 @@ def main() -> None:
 
     print("\nGenerating SEO metadata suggestions...")
     try:
+        from metadata import format_metadata, generate_seo_metadata
         metadata = generate_seo_metadata(transcript)
     except Exception as exc:
         print(f"\nMetadata generation failed: {exc}")

@@ -8,17 +8,16 @@ import json
 import os
 
 from dotenv import load_dotenv
-from google import genai
 
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GOOGLE_GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
 
-_client: genai.Client | None = None
+_client = None
 
 
-def _get_client() -> genai.Client:
+def _get_client():
     global _client
     if _client is None:
         if not GEMINI_API_KEY:
@@ -26,6 +25,7 @@ def _get_client() -> genai.Client:
                 "GOOGLE_GEMINI_API_KEY is not set. Add it to a .env file "
                 "in whisper-playground/ or the repo root."
             )
+        from google import genai
         _client = genai.Client(api_key=GEMINI_API_KEY)
     return _client
 
