@@ -1,7 +1,0 @@
-samples/*
-!samples/.gitkeep
-output/
-__pycache__/
-*.pyc
-.venv/
-venv/
